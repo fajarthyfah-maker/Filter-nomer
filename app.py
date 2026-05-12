@@ -2,6 +2,7 @@ import streamlit as st
 import re
 
 def filter_numbers(input_text):
+    # Mengambil angka 3 atau 4 digit
     numbers = re.findall(r'\b\d{3,4}\b', input_text)
     
     results = {
@@ -9,7 +10,6 @@ def filter_numbers(input_text):
         "Semua Ganjil (1,3,5,7,9)": [],
         "Semua Besar (5,6,7,8,9)": [],
         "Semua Kecil (0,1,2,3,4)": [],
-        "Angka Campuran (Murni Random)": [], # Kategori Baru
         "Tanpa Kembar": [],
         "Two Pair (xxyy)": [],
         "Kembar Depan": [],
@@ -24,46 +24,75 @@ def filter_numbers(input_text):
     KECIL = set("01234")
 
     for num in numbers:
+        # 1. Buang jika ada kembar 3 atau lebih
         if any(num.count(digit) >= 3 for digit in set(num)):
             continue
 
         num_set = set(num)
         
-        # Cek status spesifik
-        is_all_genap = num_set.issubset(GENAP)
-        is_all_ganjil = num_set.issubset(GANJIL)
-        is_all_besar = num_set.issubset(BESAR)
-        is_all_kecil = num_set.issubset(KECIL)
-        is_no_twin = len(num_set) == len(num)
+        # 2. Filter Jenis Digit
+        if num_set.issubset(GENAP):
+            results["Semua Genap (0,2,4,6,8)"].append(num)
+        if num_set.issubset(GANJIL):
+            results["Semua Ganjil (1,3,5,7,9)"].append(num)
+        if num_set.issubset(BESAR):
+            results["Semua Besar (5,6,7,8,9)"].append(num)
+        if num_set.issubset(KECIL):
+            results["Semua Kecil (0,1,2,3,4)"].append(num)
 
-        # 1. Masukkan ke kategori spesifik digit
-        if is_all_genap: results["Semua Genap (0,2,4,6,8)"].append(num)
-        if is_all_ganjil: results["Semua Ganjil (1,3,5,7,9)"].append(num)
-        if is_all_besar: results["Semua Besar (5,6,7,8,9)"].append(num)
-        if is_all_kecil: results["Semua Kecil (0,1,2,3,4)"].append(num)
-
-        # 2. LOGIKA BARU: Angka Campuran
-        # Syarat: Tidak kembar DAN bukan salah satu dari 4 kategori di atas
-        if is_no_twin and not (is_all_genap or is_all_ganjil or is_all_besar or is_all_kecil):
-            results["Angka Campuran (Murni Random)"].append(num)
-
-        # 3. Masukkan ke kategori pola kembar (seperti sebelumnya)
+        # 3. Filter Pola Kembar
         length = len(num)
-        if is_no_twin:
-            results["Tanpa Kembar"].append(num)
-        elif length == 4:
-            a, b, c, d = num[0], num[1], num[2], num[3]
-            if a == b and c == d: results["Two Pair (xxyy)"].append(num)
-            elif a == c or b == d or a == d: results["Kembar Selang-Seling"].append(num)
-            elif a == b: results["Kembar Depan"].append(num)
-            elif b == c: results["Kembar Tengah"].append(num)
-            elif c == d: results["Kembar Belakang"].append(num)
+        if length == 4:
+            # Mengambil tiap posisi digit
+            d1, d2, d3, d4 = num[0], num[1], num[2], num[3]
+            
+            if len(num_set) == 4:
+                results["Tanpa Kembar"].append(num)
+            elif d1 == d2 and d3 == d4:
+                results["Two Pair (xxyy)"].append(num)
+            elif d1 == d3 or d2 == d4 or d1 == d4:
+                results["Kembar Selang-Seling"].append(num)
+            elif d1 == d2:
+                results["Kembar Depan"].append(num)
+            elif d2 == d3:
+                results["Kembar Tengah"].append(num)
+            elif d3 == d4:
+                results["Kembar Belakang"].append(num)
+
         elif length == 3:
-            a, b, c = num[0], num[1], num[2]
-            if a == b: results["Kembar Depan"].append(num)
-            elif b == c: results["Kembar Belakang"].append(num)
-            elif a == c: results["Kembar Selang-Seling"].append(num)
+            d1, d2, d3 = num[0], num[1], num[2]
+            if len(num_set) == 3:
+                results["Tanpa Kembar"].append(num)
+            elif d1 == d2:
+                results["Kembar Depan"].append(num)
+            elif d2 == d3:
+                results["Kembar Belakang"].append(num)
+            elif d1 == d3:
+                results["Kembar Selang-Seling"].append(num)
 
     return results
 
-# (Bagian UI Streamlit tetap sama seperti kode sebelumnya)
+# --- UI STREAMLIT ---
+st.set_page_config(page_title="Pilah Angka Pro", layout="wide")
+st.title("🔢 Pemilah Angka Pro (3D/4D)")
+
+input_data = st.text_area("Masukkan angka (pisahkan spasi/koma/bintang):", height=200)
+
+if st.button("Proses Sekarang"):
+    if input_data:
+        processed = filter_numbers(input_data)
+        
+        # Tampilkan hasil
+        cols = st.columns(2)
+        idx = 0
+        for category, items in processed.items():
+            if items:
+                with cols[idx % 2]:
+                    st.subheader(f"📂 {category}")
+                    st.caption(f"Total: {len(items)}")
+                    # Format output dengan bintang di antara angka dan di akhir
+                    output_text = "*".join(items) + "*"
+                    st.code(output_text, language="text")
+                idx += 1
+    else:
+        st.warning("Silahkan masukkan angka dulu!")
