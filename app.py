@@ -1,63 +1,98 @@
 import streamlit as st
+import re
 
-# Konfigurasi Halaman
-st.set_page_config(page_title="4D Filter Pro", layout="wide")
-st.title("🎯 4D Number Matcher & Formatter")
-
-# 1. Database Internal (0000 - 9999)
-@st.cache_data
-def load_database():
-    return [str(i).zfill(4) for i in range(10000)]
-
-all_numbers = load_database()
-
-# 2. Area Input
-st.subheader("Input Data")
-raw_input = st.text_area(
-    "Masukkan nomor 4D (bisa pakai spasi, koma, bintang, atau baris baru):", 
-    placeholder="Contoh: 1234, 5566*7788 9900",
-    height=150
-)
-
-# 3. Logika Pemrosesan
-if raw_input:
-    # Membersihkan segala karakter non-digit menjadi spasi, lalu split
-    import re
-    # Mengambil hanya sekumpulan 4 angka
-    input_list = re.findall(r'\d{4}', raw_input)
-    # Hapus duplikat dan urutkan
-    input_list = sorted(list(set(input_list)))
+def filter_numbers(input_text):
+    # Mengambil semua deretan angka 3 atau 4 digit
+    numbers = re.findall(r'\b\d{3,4}\b', input_text)
     
-    # Filter Nomor
-    pernah_keluar = input_list
-    belum_keluar_total = [n for n in all_numbers if n not in input_list]
-    
-    def is_kembar(n):
-        return len(set(n)) < 4
+    # Inisialisasi kategori
+    results = {
+        "Semua Genap (0,2,4,6,8)": [],
+        "Semua Ganjil (1,3,5,7,9)": [],
+        "Semua Besar (5,6,7,8,9)": [],
+        "Semua Kecil (0,1,2,3,4)": [],
+        "Tanpa Kembar": [],
+        "Two Pair (xxyy)": [],
+        "Kembar Depan": [],
+        "Kembar Tengah": [],
+        "Kembar Belakang": [],
+        "Kembar Selang-Seling": [],
+    }
 
-    belum_keluar_polos = [n for n in belum_keluar_total if not is_kembar(n)]
-    belum_keluar_kembar = [n for n in belum_keluar_total if is_kembar(n)]
+    # Set pembantu
+    GENAP = set("02468")
+    GANJIL = set("13579")
+    BESAR = set("56789")
+    KECIL = set("01234")
 
-    # --- Tampilan Hasil ---
-    col1, col2, col3 = st.columns(3)
+    for num in numbers:
+        # 1. VALIDASI: Buang jika ada kembar 3 atau lebih (misal 1112, 222)
+        if any(num.count(digit) >= 3 for digit in set(num)):
+            continue
 
-    with col1:
-        st.success(f"Pernah Keluar: {len(pernah_keluar)}")
-        if st.checkbox("Tampilkan Pernah Keluar"):
-            # Output format: 1234*2345*
-            output_1 = "*".join(pernah_keluar) + "*" if pernah_keluar else ""
-            st.code(output_1)
+        # 2. FILTER BERDASARKAN JENIS DIGIT
+        num_set = set(num)
+        if num_set.issubset(GENAP):
+            results["Semua Genap (0,2,4,6,8)"].append(num)
+        if num_set.issubset(GANJIL):
+            results["Semua Ganjil (1,3,5,7,9)"].append(num)
+        if num_set.issubset(BESAR):
+            results["Semua Besar (5,6,7,8,9)"].append(num)
+        if num_set.issubset(KECIL):
+            results["Semua Kecil (0,1,2,3,4)"].append(num)
 
-    with col2:
-        st.info(f"Belum Keluar (No Kembar): {len(belum_keluar_polos)}")
-        if st.checkbox("Tampilkan Belum Keluar (No Kembar)"):
-            output_2 = "*".join(belum_keluar_polos) + "*" if belum_keluar_polos else ""
-            st.code(output_2)
+        # 3. FILTER BERDASARKAN POLA KEMBAR
+        length = len(num)
+        if length == 4:
+            a, b, c, d = num[0], num[1], num[2], num[3]
+            if len(num_set) == 4:
+                results["Tanpa Kembar"].append(num)
+            elif a == b and c == d:
+                results["Two Pair (xxyy)"].append(num)
+            elif a == c or b == d or a == d: # Selang seling atau ABAC / ABCA
+                results["Kembar Selang-Seling"].append(num)
+            elif a == b:
+                results["Kembar Depan"].append(num)
+            elif b == c:
+                results["Kembar Tengah"].append(num)
+            elif c == d:
+                results["Kembar Belakang"].append(num)
 
-    with col3:
-        st.warning(f"Belum Keluar (Ada Kembar): {len(belum_keluar_kembar)}")
-        if st.checkbox("Tampilkan Belum Keluar (Kembar)"):
-            output_3 = "*".join(belum_keluar_kembar) + "*" if belum_keluar_kembar else ""
-            st.code(output_3)
-else:
-    st.info("Masukkan data untuk diproses.")
+        elif length == 3:
+            a, b, c = num[0], num[1], num[2]
+            if len(num_set) == 3:
+                results["Tanpa Kembar"].append(num)
+            elif a == b:
+                results["Kembar Depan"].append(num)
+            elif b == c:
+                results["Kembar Belakang"].append(num)
+            elif a == c:
+                results["Kembar Selang-Seling"].append(num)
+
+    return results
+
+# --- UI STREAMLIT ---
+st.set_page_config(page_title="Pilah Angka V2", layout="wide")
+st.title("🔢 Pemilah Angka Pro (3D/4D)")
+st.write("Saring ribuan angka berdasarkan pola kembar, ganjil-genap, dan besar-kecil secara otomatis.")
+
+input_data = st.text_area("Tempelkan angka di sini (pisahkan pakai spasi, koma, atau bintang):", height=200)
+
+if st.button("Proses Sekarang"):
+    if input_data:
+        processed = filter_numbers(input_data)
+        
+        # Tampilkan hasil dalam kolom agar rapi
+        cols = st.columns(2)
+        for i, (category, items) in enumerate(processed.items()):
+            col = cols[i % 2]
+            with col:
+                if items:
+                    st.subheader(f"📂 {category}")
+                    st.caption(f"Total: {len(items)} angka")
+                    output_text = "*".join(items) + "*"
+                    st.code(output_text, language="text")
+                else:
+                    st.info(f"📂 {category}: Tidak ada data")
+    else:
+        st.warning("Silahkan masukkan angka dulu!")
